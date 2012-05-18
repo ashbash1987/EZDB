@@ -40,7 +40,7 @@ def getClass():
             Private static method for returning SQL for field definitions.
             """
             fields = []
-            for k, v in values:
+            for k, v in values.items():
                 fieldType = v.fieldType
                 if v.length is not None:
                     fieldType = "%s(%d)" % (fieldType, v.length)                            
@@ -52,7 +52,7 @@ def getClass():
                         attributes = "%s DEFAULT %s" % (attributes, str(v.default))
                 elif structs.Attributes.NOT_NULL not in v.attributes:
                     attributes = "%s DEFAULT NULL" % attributes
-                fields.append("%s %s" % (fieldType, attributes))
+                fields.append("%s %s %s" % (k, fieldType, attributes))
             return ", ".join(fields)                        
         
         @staticmethod
@@ -72,9 +72,9 @@ def getClass():
         def buildTable(self, table, fields, primary, unique):
             definitions = []
             definitions.append(MySQL._getFieldDefinition(fields))        
-            if primary is not None:        
+            if primary is not None and len(primary) > 0:        
                 definitions.append(MySQL._getPrimaryDefinition(primary))
-            if unique is not None:
+            if unique is not None and len(unique) > 0:
                 definitions.append(MySQL._getUniqueDefinition(unique))        
             query = "CREATE TABLE IF NOT EXISTS `%s` (%s)" % (table, ", ".join(definitions))
             cursor = self._dbConnector.cursor()                
@@ -110,9 +110,7 @@ def getClass():
             """
             Private static method for returning SQL of field initialization.
             """
-            tokens = []        
-            for value in values.values():
-                tokens.append(MySQL._getToken(value))
+            tokens = map(lambda x: MySQL._getToken(x), values)       
             return ", ".join(tokens)
         
         @staticmethod

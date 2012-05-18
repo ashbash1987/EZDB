@@ -31,7 +31,7 @@ class SQLite(interface.DBInterface):
         Private static method for returning SQL for field definitions.
         """
         fields = []
-        for k, v in values:
+        for k, v in values.items():
             fieldType = v.fieldType
             if v.length is not None:
                 fieldType = "%s(%d)" % (fieldType, v.length)                
@@ -48,7 +48,7 @@ class SQLite(interface.DBInterface):
                     attributes = "%s DEFAULT %s" % (attributes, str(v.default))
             elif structs.Attributes.NOT_NULL not in v.attributes:
                 attributes = "%s DEFAULT NULL" % attributes
-            fields.append("%s %s" % (fieldType, attributes))
+            fields.append("%s %s %s" % (k, fieldType, attributes))
         return ", ".join(fields)                        
     
     @staticmethod
@@ -68,12 +68,12 @@ class SQLite(interface.DBInterface):
     def buildTable(self, table, fields, primary, unique):
         definitions = []
         definitions.append(SQLite._getFieldDefinition(fields))        
-        if primary is not None:        
+        if primary is not None and len(primary) > 0:        
             definitions.append(SQLite._getPrimaryDefinition(primary))
-        if unique is not None:
+        if unique is not None and len(unique) > 0:
             definitions.append(SQLite._getUniqueDefinition(unique))        
         query = "CREATE TABLE IF NOT EXISTS `%s` (%s)" % (table, ", ".join(definitions))
-        cursor = self._dbConnector.cursor()                
+        cursor = self._dbConnector.cursor()
         cursor.execute(query)
         cursor.close()        
     buildTable.__doc__ = interface.DBInterface.buildTable.__doc__        
@@ -106,9 +106,7 @@ class SQLite(interface.DBInterface):
         """
         Private static method for returning SQL of field initialization.
         """
-        tokens = []        
-        for value in values.values():
-            tokens.append(SQLite._getToken(value))
+        tokens = map(lambda x: SQLite._getToken(x), values)        
         return ", ".join(tokens)
     
     @staticmethod
@@ -143,16 +141,16 @@ class SQLite(interface.DBInterface):
         for conditional in conditionalValues:
             token = SQLite._getToken(conditional.value)
             conditionals.append("`%s`%s%s" % (conditional.field, conditional.argument, token))
-        return condition.join(conditionals)  
+        return condition.join(conditionals)         
         
     def insert(self, table, values, *a):
         queryArguments = []
         for value in values.values():
             queryArguments.append(value)
         fields = SQLite._buildFieldString(values.keys())
-        valuetokens = SQLite._buildValueTokenString(values.values())        
-        query = "INSERT %s INTO `%s` (%s) VALUES (%s)" % (" ".join(a), table, fields, valuetokens)        
-        cursor = self._dbConnector.cursor()                
+        valuetokens = SQLite._buildValueTokenString(values.values())
+        query = "INSERT %s INTO `%s` (%s) VALUES (%s)" % (" ".join(a), table, fields, valuetokens)
+        cursor = self._dbConnector.cursor()
         cursor.execute(query, queryArguments)
         cursor.close()        
     insert.__doc__ = interface.DBInterface.insert.__doc__                        
@@ -172,7 +170,7 @@ class SQLite(interface.DBInterface):
         if offset > 0 or count > 0:
             query = "%s LIMIT %d, %d" % (query, int(offset), int(count))
         cursor = self._dbConnector.cursor()
-        cursor.execute(query, queryArguments)        
+        cursor.execute(query, queryArguments)                
         rows = cursor.fetchall()
         cursor.close()
         return rows       

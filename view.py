@@ -18,7 +18,7 @@ class View(object):
                     Template = __import__('mako.template', fromlist=['Template'])
                 template = Template(filename=viewCallback, moduleDirectory=moduleDirectory)
                 result = result + template.render(obj=obj)
-            elif hasattr(viewCallback, '__call__')
+            elif hasattr(viewCallback, '__call__'):
                 result = result + viewCallback(obj)
         return result
     
