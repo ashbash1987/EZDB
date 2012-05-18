@@ -106,29 +106,21 @@ class SQLite(interface.DBInterface):
         """
         Private static method for returning SQL of field initialization.
         """
-        tokens = map(lambda x: SQLite._getToken(x), values)        
-        return ", ".join(tokens)
+        return ", ".join(map(lambda x: SQLite._getToken(x), values))
     
     @staticmethod
     def _buildAssignmentString(assignmentValues):
         """
         Private static method for returning SQL of field assignments.
         """
-        assignments = []
-        for k,v in assignmentValues.items():
-            token = SQLite._getToken(v)
-            assignments.append("`%s`=%s" % (k, token))
-        return ", ".join(assignments)
+        return ", ".join(map(lambda x: "`%s`=%s" % (x[0], SQLite._getToken(x[1])), assignmentValues.items()))
     
     @staticmethod
     def _buildOrderString(orderValues):
         """
         Private static method for returning SQL of field ordering statements.
         """
-        orders = []
-        for k,v in orderValues.items():
-            orders.append("`%s` %s" % (k, v))
-        return ", ".join(orders)                
+        return ", ".join(map(lambda x: "`%s` %s" % x, orderValues.items()))                
                         
     @staticmethod
     def _buildConditionString(conditionalValues, condition=" AND "):
@@ -156,25 +148,40 @@ class SQLite(interface.DBInterface):
     insert.__doc__ = interface.DBInterface.insert.__doc__                        
         
     def select(self, table, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+        return self.selectJoin(table, (), conditionals, selectFields, orderFields, offset, count)
+    select.__doc__ = interface.DBInterface.select.__doc__
+    
+    def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
         queryArguments = []
         fields = SQLite._buildFieldString(selectFields)                
-        query = "SELECT %s FROM `%s`" % (fields, table)
+        query = "SELECT %s FROM `%s`" % (fields, baseTable)
+        
+        if joins is not None and len(joins) > 0:
+            joinElements = []
+            for join in joins:
+                tableJoinStatement = "%s `%s` ON " % (join.joinType, join.rightTable)
+                joinElements.append(tableJoinStatement + (" AND ".join(map(lambda x: "`%s`.`%s`%s`%s`.`%s`" % (join.leftTable, x.leftField, x.argument, join.rightTable, x.rightField), join.fieldJoins))))
+            query = "%s %s" % (query, " ".join(joinElements))                             
+
         if conditionals != None:
             for conditional in conditionals:
                 queryArguments.append(conditional.value)                
             conditions = SQLite._buildConditionString(conditionals)
-            query = "%s WHERE %s" % (query, conditions)            
+            query = "%s WHERE %s" % (query, conditions)
+                        
         if orderFields is not None:
             orders = SQLite._buildOrderString(orderFields)
-            query = "%s ORDER BY %s" % (query, orders)            
+            query = "%s ORDER BY %s" % (query, orders)
+                        
         if offset > 0 or count > 0:
             query = "%s LIMIT %d, %d" % (query, int(offset), int(count))
+            
         cursor = self._dbConnector.cursor()
         cursor.execute(query, queryArguments)                
         rows = cursor.fetchall()
         cursor.close()
         return rows       
-    select.__doc__ = interface.DBInterface.select.__doc__                        
+    selectJoin.__doc__ = interface.DBInterface.selectJoin.__doc__
         
     def update(self, table, values, conditionals):
         queryArguments = []

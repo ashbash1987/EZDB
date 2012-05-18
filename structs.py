@@ -24,6 +24,11 @@ Enum of different field attributes.
 """
 Attributes = enum(UNSIGNED="UNSIGNED", AUTOINCREMENT="AUTO_INCREMENT", NOT_NULL="NOT NULL")
 
+"""
+Enum of different join types.
+"""
+Joins = enum(INNER="INNER JOIN", LEFT_OUTER="LEFT OUTER JOIN", RIGHT_OUTER="RIGHT OUTER JOIN", FULL_OUTER="FULL OUTER JOIN", CROSS="CROSS JOIN")
+
 class Field(object):
     """
     A class that defines the properties of a field.
@@ -53,11 +58,36 @@ class Conditional(object):
     field = None
     value = None
     argument = Condition.EQUAL
-    def __init__(self, *a):
-        if len(a) >= 2:
-            self.field = a[0]
-            self.value = a[1]        
-        if len(a) >= 3:
-            self.argument = a[2]        
+    def __init__(self, field, value, argument=Condition.EQUAL):
+        self.field = field
+        self.value = value
+        self.argument = argument
 
-                                                          
+class TableJoin(object):
+    """
+    A class that defines a table join.
+    """
+    leftTable = None
+    rightTable = None
+    joinType = Joins.INNER
+    fieldJoins = ()
+    def __init__(self, leftTable, rightTable, fieldJoins, joinType=Joins.INNER):
+        self.leftTable = leftTable
+        self.rightTable = rightTable
+        self.joinType = joinType
+        self.fieldJoins = fieldJoins
+
+class FieldJoin(object):
+    """
+    A class that defines a field join.
+    """
+    leftField = None
+    rightField = None
+    argument = Condition.EQUAL
+    def __init__(self, leftField, rightField=None, argument=Condition.EQUAL):
+        self.leftField = leftField
+        if self.rightField is None:
+            self.rightField = self.leftField
+        else:
+            self.rightField = rightField
+        self.argument = argument            

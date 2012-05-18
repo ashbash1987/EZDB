@@ -35,6 +35,13 @@ def getClass():
                                               cursorclass=cursors.DictCursor)
             
         @staticmethod
+        def _getToken(value):
+            """
+            Private static method for returning an appropriate SQL token.
+            """
+            return "%s"
+            
+        @staticmethod
         def _getFieldDefinition(values):
             """
             Private static method for returning SQL for field definitions.
@@ -87,14 +94,7 @@ def getClass():
             cursor = self._dbConnector.cursor()
             cursor.execute(query)
             cursor.close()      
-        dropTable.__doc__ = interface.DBInterface.dropTable.__doc__        
-            
-        @staticmethod
-        def _getToken(value):
-            """
-            Private static method for returning an appropriate SQL token.
-            """
-            return "%s"
+        dropTable.__doc__ = interface.DBInterface.dropTable.__doc__                    
     
         @staticmethod
         def _buildFieldString(fields):
@@ -110,29 +110,21 @@ def getClass():
             """
             Private static method for returning SQL of field initialization.
             """
-            tokens = map(lambda x: MySQL._getToken(x), values)       
-            return ", ".join(tokens)
+            return ", ".join(map(lambda x: MySQL._getToken(x), values))
         
         @staticmethod
         def _buildAssignmentString(assignmentValues):
             """
             Private static method for returning SQL of field assignments.
-            """
-            assignments = []
-            for k,v in assignmentValues.items():
-                token = MySQL._getToken(v)
-                assignments.append("`%s`=%s" % (k, token))
-            return ", ".join(assignments)
+            """            
+            return ", ".join(map(lambda x: "`%s`=%s" % (x[0], MySQL._getToken(x[1])), assignmentValues.items()))
         
         @staticmethod
         def _buildOrderString(orderValues):
             """
             Private static method for returning SQL of field ordering statements.
             """
-            orders = []
-            for k,v in orderValues.items():
-                orders.append("`%s` %s" % (k, v))
-            return ", ".join(orders)                
+            return ", ".join(map(lambda x: "`%s` %s" % x, orderValues.items()))                
                             
         @staticmethod
         def _buildConditionString(conditionalValues, condition=" AND "):
@@ -160,25 +152,40 @@ def getClass():
         insert.__doc__ = interface.DBInterface.insert.__doc__                        
             
         def select(self, table, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+            return self.selectJoin(table, (), conditionals, selectFields, orderFields, offset, count)
+        select.__doc__ = interface.DBInterface.select.__doc__
+        
+        def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
             queryArguments = []
             fields = MySQL._buildFieldString(selectFields)                
             query = "SELECT %s FROM `%s`" % (fields, table)
+            
+            if joins is not None and len(joins) > 0:
+                joinElements = []
+                for join in joins:
+                    tableJoinStatement = "%s `%s` ON " % (join.joinType, join.rightTable)
+                    joinElements.append(tableJoinStatement + (" AND ".join(map(lambda x: "`%s`.`%s`%s`%s`.`%s`" % (join.leftTable, x.leftField, x.argument, join.rightTable, x.rightField), join.fieldJoins))))
+                query = "%s %s" % (query, joinElements)                    
+            
             if conditionals != None:
                 for conditional in conditionals:
                     queryArguments.append(conditional.value)                
                 conditions = MySQL._buildConditionString(conditionals)
-                query = "%s WHERE %s" % (query, conditions)            
+                query = "%s WHERE %s" % (query, conditions)
+                            
             if orderFields is not None:
                 orders = MySQL._buildOrderString(orderFields)
-                query = "%s ORDER BY %s" % (query, orders)            
+                query = "%s ORDER BY %s" % (query, orders)
+                            
             if offset > 0 or count > 0:
                 query = "%s LIMIT %d, %d" % (query, int(offset), int(count))
+            
             cursor = self._dbConnector.cursor()
             cursor.execute(query, queryArguments)        
             rows = cursor.fetchall()
             cursor.close()
-            return rows
-        select.__doc__ = interface.DBInterface.select.__doc__                        
+            return rows           
+        selectJoin.__doc__ = interface.DBInterface.selectJoin.__doc__                                
             
         def update(self, table, values, conditionals):
             queryArguments = []

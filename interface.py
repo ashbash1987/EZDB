@@ -31,6 +31,12 @@ class DBInterface(object):
         Method for selecting rows from a table given certain options.
         """
         raise NotImplementedError("Inheriting class should provide 'select'")
+    
+    def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+        """
+        Method for selecting rows from a table given certain options, along with joins.
+        """
+        raise NotImplementedError("Inheriting class should provide 'selectJoin'")
         
     def update(self, table, values, conditionals):
         """

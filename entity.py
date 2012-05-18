@@ -438,23 +438,26 @@ class Entity(object):
         """
         Class method which will return a list of entities of 'cls' type given certain options.
         """
-        results = cls.selectBasic(db, conditionals, orderFields, offset, count)
-        objects = []
-        for result in results:
-            newObject = cls(db, **result)
-            for key, value in newObject.REFERENCES.items():
-                referenced = True
-                for primaryKey in value.referenceType.PRIMARY:
-                    if primaryKey not in result:
-                        referenced = False
-                        break
-                if referenced:
-                    conditionals = []
+        if cls.REFERENCES is None or len(cls.REFERENCES) == 0:                
+            results = cls.selectBasic(db, conditionals, orderFields, offset, count)
+            objects = []
+            for result in results:
+                newObject = cls(db, **result)
+                for key, value in newObject.REFERENCES.items():
+                    referenced = True
                     for primaryKey in value.referenceType.PRIMARY:
-                        conditionals.append(Conditional(primaryKey, result[primaryKey]))
-                    newObject[key] = value.referenceType.selectOne(db, conditionals)                                    
-            objects.append(newObject)                
-        return objects
+                        if primaryKey not in result:
+                            referenced = False
+                            break
+                    if referenced:
+                        conditionals = []
+                        for primaryKey in value.referenceType.PRIMARY:
+                            conditionals.append(Conditional(primaryKey, result[primaryKey]))
+                        newObject[key] = value.referenceType.selectOne(db, conditionals)                                    
+                objects.append(newObject)                
+            return objects
+        else:
+            pass
     
     @classmethod
     def selectOne(cls, db, conditionals=None):
