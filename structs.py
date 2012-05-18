@@ -51,6 +51,18 @@ class FieldReference(object):
     def __init__(self, referenceType):
         self.referenceType = referenceType
 
+class FieldIdentifier(object):
+    """
+    A class that defines a field identifier.
+    """
+    tableName = None
+    fieldName = None
+    alias = None
+    def __init__(self, tableName, fieldName):
+        self.tableName = tableName
+        self.fieldName = fieldName
+        self.alias = "%s_%s" % (tableName, fieldName)
+
 class Conditional(object):
     """
     A class that defines a conditional statement.
