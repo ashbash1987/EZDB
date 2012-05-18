@@ -10,8 +10,8 @@ def selectImplementation(implementation="MySQLdb"):
     mysql = __import__(implementation)
     cursors = __import__("%s.cursors" % implementation)
     
-import interface
-import structs
+from .. import interface
+from .. import structs
 
 def getClass():
     """

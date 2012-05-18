@@ -1,7 +1,7 @@
 import sqlite3
 
-import interface
-import structs
+from .. import interface
+from .. import structs
 
 class SQLite(interface.DBInterface):
     """

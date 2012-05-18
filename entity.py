@@ -2,26 +2,49 @@ import copy
 import structs
 import interface
 import view
-from .. import ezdb
 
 """
 Enum defining the different flags for an entity.
 """
 EntityFlags = structs.enum(NEW=1, DIRTY=2, DELETED=4, CLOSED=8)
 
+class EntityManager(object):
+    _entityClasses = {}
+
+    def __init__(self):
+        self._entityClasses = {}
+        pass
+    
+    def registerEntityClass(self, entityClass):            
+        self._entityClasses(entityClass.__name__) = entityClass
+        
+    def __getattr__(self, name):
+        if name in self._entityClasses:
+            return self._entityClasses[name]
+        return super(EntityManager, self).__getattr__(self, name)   
+    
+    def __getitem__(self, name):
+        if name in self._entityClasses:
+            return self._entityClasses[name]
+        return super(EntityManager, self).__getitem__(self, name)           
+
+entities = EntityManager()
+
 class EntityMetaclass(type):
     """
     A metaclass for entities which will automatically populate FIELDS with additional fields given the reference definitions set in REFERENCES.
     """
     def __new__(cls, name, bases, dct):
+        global entities
         if "FIELDS" in dct and "REFERENCES" in dct and len("REFERENCES") > 0:
             for k,v in dct["REFERENCES"].items():
                 for primaryKey in v.referenceType.PRIMARY:
                     field = copy.deepcopy(v.referenceType.FIELDS[primaryKey])
                     field.attributes = filter(lambda x: x != structs.Attributes.AUTOINCREMENT, field.attributes)
                     dct["FIELDS"][primaryKey] = field
+        dct["_ENTITIES"] = None
         classObject = type.__new__(cls, name, bases, dct)                    
-        ezdb.entities.registerEntityClass(classObject)
+        entities.registerEntityClass(classObject)
         return classObject
         
 class Entity(object):
