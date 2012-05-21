@@ -444,9 +444,9 @@ class Entity(object):
         for field in cls.FIELDS:
             fields.append(structs.FieldIdentifier(cls.TABLE, field))            
         for key, value in cls.REFERENCES.items():
-            fieldJoins = map(lambda x: structs.FieldJoin(x), v.PRIMARY)
-            joins.append(structs.TableJoin(cls.TABLE, v.TABLE, fieldJoins))
-            newJoins, newFields = value._buildJoinRecursive()
+            fieldJoins = map(lambda x: structs.FieldJoin(x), value.referenceType.PRIMARY)
+            joins.append(structs.TableJoin(cls.TABLE, value.referenceType.TABLE, fieldJoins))
+            newJoins, newFields = value.referenceType._buildJoinRecursive()
             joins = joins + newJoins
             fields = fields + newFields
         return joins, fields 
@@ -474,7 +474,7 @@ class Entity(object):
             )                               # End tuple of references in A
         )                                   # End class A          
         """
-        return (cls, map(lambda x: (x[0], x[1].referenceType._buildReferenceChain()), cls.REFERENCES.items())) 
+        return (cls, tuple(map(lambda x: (x[0], x[1].referenceType._buildReferenceChain()), cls.REFERENCES.items()))) 
     
     @classmethod
     def _buildReferenceList(cls):
@@ -482,7 +482,7 @@ class Entity(object):
         Builds a reference list from a base class down, using class REFERENCES.
         Unlike _buildReferenceChain(), this does not hold any hierarchical information - it is just a list of reference types mentioned.
         """
-        return (cls,) + map(lambda x: x.referenceType._buildReferenceList(), cls.REFERENCES.values())
+        return (cls,) + tuple(map(lambda x: x.referenceType._buildReferenceList(), cls.REFERENCES.values()))
     
     @classmethod
     def _buildObject(cls, db, values):
@@ -491,6 +491,7 @@ class Entity(object):
         """    
         chain = cls._buildReferenceChain()
         object = Entity._buildObjectRecursive(db, chain, values)
+        return object
     
     @staticmethod
     def _buildObjectRecursive(db, chain, values):
@@ -499,7 +500,7 @@ class Entity(object):
         Will build child objects first by recursively calling this method, which will be used to populate parent objects fully.
         """
         classObject = chain[0]
-        classValues = values[classObject.TABLE]                    
+        classValues = values[classObject.TABLE]
         for reference in chain[1]:
             fieldName = reference[0]
             fieldValue = Entity._buildObjectRecursive(db, reference[1], values)
