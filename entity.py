@@ -10,6 +10,10 @@ Enum defining the different flags for an entity.
 EntityFlags = structs.enum(NEW=1, DIRTY=2, DELETED=4, CLOSED=8)
 
 class EntityManager(object):
+    """
+    A class managing the registration and distribution of class objects that inherit from Entity.
+    Used by other modules to access entities provided by other modules without direct access required to the source module of the entity.
+    """
     _entityClasses = {}
 
     def __init__(self):
@@ -36,6 +40,10 @@ class EntityMetaclass(type):
     A metaclass for entities which will automatically populate FIELDS with additional fields given the reference definitions set in REFERENCES.
     """
     def __new__(cls, name, bases, dct):
+        """
+        Called when creating a class instance inheriting from Entity.
+        Automatically builds up certain elements of class variables.
+        """
         global entities
         if "FIELDS" in dct and "REFERENCES" in dct and len("REFERENCES") > 0:
             for k,v in dct["REFERENCES"].items():
@@ -49,6 +57,10 @@ class EntityMetaclass(type):
         return classObject
         
     def __call__(cls, *a, **kwargs):
+        """
+        Called when creating an instance object from a class.
+        Acts as a factory ensuring that any existing instances created with identical unique identifiers are returned instead of a new instance. 
+        """
         obj = super(EntityMetaclass, cls).__call__(*a, **kwargs)
         return cls._getFromLocalCache(obj)    
         
@@ -101,6 +113,8 @@ class Entity(object):
         """
         Initializer.
         """
+        #Uses object's __setattr__() method to circumvent this class' __setattr__() implementation.
+        #There must be a better way...
         super(Entity, self).__setattr__('_data', {})
         super(Entity, self).__setattr__('_values', {})
         super(Entity, self).__setattr__('_referenceValues', {})
@@ -110,8 +124,10 @@ class Entity(object):
         super(Entity, self).__setattr__('_updateCallbacks', [])
         super(Entity, self).__setattr__('_deleteCallbacks', [])
         super(Entity, self).__setattr__('_db', db)
+        #Loop through **kwargs and set values.
         for k,v in kwargs.items():
-            self._setValue(k, v)            
+            self._setValue(k, v)
+        #If all PRIMARY keys are set, then the object isn't regarded as new.                        
         for key in self.PRIMARY:
             if key not in kwargs:
                 return                   
@@ -121,7 +137,9 @@ class Entity(object):
         """
         Invoked when the entity has been inserted into the database.
         """
-        self._isNew = False
+        #Remove the NEW flag
+        self._flags = self._flags & (~EntityFlags.NEW)
+        #Do callbacks
         for callback in self._insertCallbacks:
             callback(self)
         self._onInsertType(self)
@@ -140,7 +158,9 @@ class Entity(object):
         Invoked when the entity has been changed locally.
         """
         if not self.isNew():
+            #Add the DIRTY flag
             self._flags = self._flags | EntityFlags.DIRTY
+            #Do callbacks
             for callback in self._changeCallbacks:
                 callback(self, values)
             self._onChangeType(self, values)            
@@ -158,8 +178,9 @@ class Entity(object):
         """
         Invoked when the entity has been updated in the database.
         """
+        #Remove the DIRTY flag
         self._flags = self._flags & (~EntityFlags.DIRTY)
-        self._isDirty = False
+        #Do callbacks
         for callback in self._updateCallbacks:
             callback(self)
         self._onUpdateType(self)
@@ -177,7 +198,9 @@ class Entity(object):
         """
         Invoked when the entity has been deleted from the database.
         """
-        self._isNew = False
+        #Remove the NEW flag
+        self._flags = self._flags & (~EntityFlags.NEW)
+        #Do callbacks
         for callback in self._deleteCallbacks:
             callback(self)
         self._onDeleteType(self)
@@ -369,17 +392,22 @@ class Entity(object):
     
     @classmethod
     def buildTable(cls, db):
+        """
+        Build up a table in the database according to the Entity's definition.
+        """
         db.buildTable(cls.TABLE, cls.FIELDS, cls.PRIMARY, cls.UNIQUE)
         
     @classmethod
     def dropTable(cls, db):
+        """
+        Drop the table in the database according to the Entity's definition.
+        """
         db.dropTable(cls.TABLE)    
         
     def insert(self):
         """
         Inserts the entity into the database.
         """
-        print "INSERT"
         if self.isDeleted() or self.isClosed() or not self.isNew():
             return False
         try:
@@ -430,6 +458,7 @@ class Entity(object):
         """
         if self.isClosed():
             return False
+        #Set the CLOSED flag
         self._flags = self._flags | EntityFlags.CLOSED
         self._removeFromLocalCache(self)
         return True
@@ -587,6 +616,9 @@ class Entity(object):
     
     @classmethod
     def addToViewMode(cls, viewMode, viewCallback):
+        """
+        A public method for adding a callback to a specific view mode.
+        """
         if viewMode not in cls.VIEWS:
             cls.VIEWS[viewMode] = [viewCallback]
         else:
