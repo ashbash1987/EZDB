@@ -99,7 +99,7 @@ class SQLite(interface.DBInterface):
         """
         if fields is None:
             return "*"
-        return ", ".join(map(lambda x: "`%s`" % x, fields))
+        return ", ".join(map(lambda x: ("`%s`" % x) if isinstance(x, str) else ("`%s`.`%s` AS %s" % (x.tableName, x.fieldName, x.alias)), fields))
         
     @staticmethod
     def _buildValueTokenString(values):
@@ -147,21 +147,44 @@ class SQLite(interface.DBInterface):
         cursor.close()        
     insert.__doc__ = interface.DBInterface.insert.__doc__                        
         
-    def select(self, table, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
-        return self.selectJoin(table, (), conditionals, selectFields, orderFields, offset, count)
+    def select(self, table, selectFields=None, conditionals=None, orderFields=None, offset=0, count=0):
+        queryArguments = []
+        fields = SQLite._buildFieldString(selectFields)                
+        query = "SELECT %s FROM `%s`" % (fields, baseTable)                            
+
+        if conditionals != None:
+            for conditional in conditionals:
+                queryArguments.append(conditional.value)                
+            conditions = SQLite._buildConditionString(conditionals)
+            query = "%s WHERE %s" % (query, conditions)
+                        
+        if orderFields is not None:
+            orders = SQLite._buildOrderString(orderFields)
+            query = "%s ORDER BY %s" % (query, orders)
+                        
+        if offset > 0 or count > 0:
+            query = "%s LIMIT %d, %d" % (query, int(offset), int(count))
+            
+        cursor = self._dbConnector.cursor()
+        cursor.execute(query, queryArguments)                
+        rows = cursor.fetchall()
+        cursor.close()
+        return rows
     select.__doc__ = interface.DBInterface.select.__doc__
     
-    def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+    def selectJoin(self, baseTable, joins, selectFields, conditionals=None, orderFields=None, offset=0, count=0):
+        if joins is None or len(joins) == 0:
+            return self.select(baseTable, selectFields, conditionals, orderFields, offset, count)
+    
         queryArguments = []
         fields = SQLite._buildFieldString(selectFields)                
         query = "SELECT %s FROM `%s`" % (fields, baseTable)
         
-        if joins is not None and len(joins) > 0:
-            joinElements = []
-            for join in joins:
-                tableJoinStatement = "%s `%s` ON " % (join.joinType, join.rightTable)
-                joinElements.append(tableJoinStatement + (" AND ".join(map(lambda x: "`%s`.`%s`%s`%s`.`%s`" % (join.leftTable, x.leftField, x.argument, join.rightTable, x.rightField), join.fieldJoins))))
-            query = "%s %s" % (query, " ".join(joinElements))                             
+        joinElements = []
+        for join in joins:
+            tableJoinStatement = "%s `%s` ON " % (join.joinType, join.rightTable)
+            joinElements.append(tableJoinStatement + (" AND ".join(map(lambda x: "`%s`.`%s`%s`%s`.`%s`" % (join.leftTable, x.leftField, x.argument, join.rightTable, x.rightField), join.fieldJoins))))
+        query = "%s %s" % (query, " ".join(joinElements))                             
 
         if conditionals != None:
             for conditional in conditionals:

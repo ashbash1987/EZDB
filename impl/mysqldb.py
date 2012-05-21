@@ -101,9 +101,9 @@ def getClass():
             """
             Private static method for returning SQL of field selections.
             """
-            if fields is None:
+            if fields is None or len(fields) == 0:
                 return "*"
-            return ", ".join(map(lambda x: "`%s`" % x, fields))
+            return ", ".join(map(lambda x: ("`%s`" % x) if isinstance(x, str) else ("`%s`.`%s` AS %s" % (x.tableName, x.fieldName, x.alias)), fields))
             
         @staticmethod
         def _buildValueTokenString(values):
@@ -151,11 +151,32 @@ def getClass():
             cursor.close()
         insert.__doc__ = interface.DBInterface.insert.__doc__                        
             
-        def select(self, table, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
-            return self.selectJoin(table, (), conditionals, selectFields, orderFields, offset, count)
+        def select(self, table, selectFields=None, conditionals=None, orderFields=None, offset=0, count=0):
+            queryArguments = []
+            fields = MySQL._buildFieldString(selectFields)                
+            query = "SELECT %s FROM `%s`" % (fields, table)                  
+            
+            if conditionals != None:
+                for conditional in conditionals:
+                    queryArguments.append(conditional.value)                
+                conditions = MySQL._buildConditionString(conditionals)
+                query = "%s WHERE %s" % (query, conditions)
+                            
+            if orderFields is not None:
+                orders = MySQL._buildOrderString(orderFields)
+                query = "%s ORDER BY %s" % (query, orders)
+                            
+            if offset > 0 or count > 0:
+                query = "%s LIMIT %d, %d" % (query, int(offset), int(count))
+            
+            cursor = self._dbConnector.cursor()
+            cursor.execute(query, queryArguments)        
+            rows = cursor.fetchall()
+            cursor.close()
+            return rows         
         select.__doc__ = interface.DBInterface.select.__doc__
         
-        def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+        def selectJoin(self, baseTable, joins, selectFields, conditionals=None, orderFields=None, offset=0, count=0):
             queryArguments = []
             fields = MySQL._buildFieldString(selectFields)                
             query = "SELECT %s FROM `%s`" % (fields, table)

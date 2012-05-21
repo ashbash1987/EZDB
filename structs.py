@@ -58,10 +58,13 @@ class FieldIdentifier(object):
     tableName = None
     fieldName = None
     alias = None
-    def __init__(self, tableName, fieldName):
+    def __init__(self, tableName, fieldName, alias=None):
         self.tableName = tableName
         self.fieldName = fieldName
-        self.alias = "%s_%s" % (tableName, fieldName)
+        if alias is None:
+            self.alias = "%s__%s" % (tableName, fieldName)
+        else:
+            self.alias = alias
 
 class Conditional(object):
     """

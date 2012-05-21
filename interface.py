@@ -26,13 +26,13 @@ class DBInterface(object):
         """
         raise NotImplementedError("Inheriting class should provide 'insert'")
         
-    def select(self, table, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+    def select(self, table, selectFields=None, conditionals=None, orderFields=None, offset=0, count=0):
         """
         Method for selecting rows from a table given certain options.
         """
         raise NotImplementedError("Inheriting class should provide 'select'")
     
-    def selectJoin(self, baseTable, joins, conditionals=None, selectFields=None, orderFields=None, offset=0, count=0):
+    def selectJoin(self, baseTable, joins, selectFields, conditionals=None, orderFields=None, offset=0, count=0):
         """
         Method for selecting rows from a table given certain options, along with joins.
         """

@@ -2,6 +2,7 @@ import copy
 import structs
 import interface
 import view
+import re
 
 """
 Enum defining the different flags for an entity.
@@ -60,7 +61,7 @@ class Entity(object):
     TABLE = None
     PRIMARY = ()
     UNIQUE = ()
-    FIELDS = ()
+    FIELDS = {}
     REFERENCES = {}
     VIEWS = {}
     
@@ -434,37 +435,108 @@ class Entity(object):
         return True
     
     @classmethod
+    def _buildJoinRecursive(cls):
+        """
+        Method that recursively iterates over class REFERENCES, adding in field & table joins according to their PRIMARY fields.
+        """
+        joins = []
+        fields = []
+        for field in cls.FIELDS:
+            fields.append(structs.FieldIdentifier(cls.TABLE, field))            
+        for key, value in cls.REFERENCES.items():
+            fieldJoins = map(lambda x: structs.FieldJoin(x), v.PRIMARY)
+            joins.append(structs.TableJoin(cls.TABLE, v.TABLE, fieldJoins))
+            newJoins, newFields = value._buildJoinRecursive()
+            joins = joins + newJoins
+            fields = fields + newFields
+        return joins, fields 
+    
+    @classmethod
+    def _buildReferenceChain(cls):
+        """
+        Builds a reference chain from a base class down, using class REFERENCES.
+        The resulting chain will look something similar to the following, if
+        A references B (as b), B references C (as c), and A references D (as d):
+        (A,                                 # Class A
+            (                               # Start tuple of references in A
+                (b,                         # Reference field name b
+                    (B,                     # Class B, from reference field b 
+                        (                   # Start tuple of references in B
+                            (c,             # Reference field name c
+                                (C, ())     # Class C, from reference field c, with empty references tuple                            
+                            ),              # End reference field c
+                        )                   # End tuple of references in B       
+                    )                       # End class B
+                ),                          # End reference field b
+                (d,                         # Reference field name d
+                    (D, ())                 # Class D, from reference field d, with empty references tuple                   
+                )                           # End reference field d
+            )                               # End tuple of references in A
+        )                                   # End class A          
+        """
+        return (cls, map(lambda x: (x[0], x[1].referenceType._buildReferenceChain()), cls.REFERENCES.items())) 
+    
+    @classmethod
+    def _buildReferenceList(cls):
+        """
+        Builds a reference list from a base class down, using class REFERENCES.
+        Unlike _buildReferenceChain(), this does not hold any hierarchical information - it is just a list of reference types mentioned.
+        """
+        return (cls,) + map(lambda x: x.referenceType._buildReferenceList(), cls.REFERENCES.values())
+    
+    @classmethod
+    def _buildObject(cls, db, values):
+        """
+        Start of a recursive method that builds objects hierarchically from a reference chain and a selectJoin query.
+        """    
+        chain = cls._buildReferenceChain()
+        object = Entity._buildObjectRecursive(db, chain, values)
+    
+    @staticmethod
+    def _buildObjectRecursive(db, chain, values):
+        """
+        Takes a chain, and builds up a set of field values for the current chain position and creates an entity object accordingly.
+        Will build child objects first by recursively calling this method, which will be used to populate parent objects fully.
+        """
+        classObject = chain[0]
+        classValues = values[classObject.TABLE]                    
+        for reference in chain[1]:
+            fieldName = reference[0]
+            fieldValue = Entity._buildObjectRecursive(db, reference[1], values)
+            classValues[fieldName] = fieldValue
+        return classObject(db, **classValues)
+        
+    @classmethod
     def select(cls, db, conditionals=None, orderFields=None, offset=0, count=0):
         """
         Class method which will return a list of entities of 'cls' type given certain options.
         """
+        objects = []
         if cls.REFERENCES is None or len(cls.REFERENCES) == 0:                
             results = cls.selectBasic(db, conditionals, orderFields, offset, count)
-            objects = []
             for result in results:
                 newObject = cls(db, **result)
-                for key, value in newObject.REFERENCES.items():
-                    referenced = True
-                    for primaryKey in value.referenceType.PRIMARY:
-                        if primaryKey not in result:
-                            referenced = False
-                            break
-                    if referenced:
-                        conditionals = []
-                        for primaryKey in value.referenceType.PRIMARY:
-                            conditionals.append(Conditional(primaryKey, result[primaryKey]))
-                        newObject[key] = value.referenceType.selectOne(db, conditionals)                                    
                 objects.append(newObject)                
-            return objects
         else:
-            pass
+            results = cls.selectJoinBasic(db, conditionals, orderFields, offset, count)
+            referenceList = cls._buildReferenceList()
+            aliasMatch = re.compile("(.*)__(.*)")
+            for result in results:
+                values = {}
+                for key, value in result.items():
+                    matchResult = aliasMatch.match(key).groups()
+                    if not matchResult[0] in values:
+                        values[matchResult[0]] = {}
+                    values[matchResult[0]][matchResult[1]] = value
+                objects.append(cls._buildObject(db, values))
+        return objects
     
     @classmethod
     def selectOne(cls, db, conditionals=None):
         """
         Just like select(), but returns only the first result.
         """
-        return cls.select(db, conditionals, None, 0, 1)
+        return cls.select(db, conditionals, None, 0, 1)[0]
     
     @classmethod
     def selectBasic(cls, db, conditionals=None, orderFields=None, offset=0, count=0):
@@ -472,14 +544,30 @@ class Entity(object):
         A method which will return a list of dictionaries given certain options.
         This does not automatically build up entities, so is useful only when working with lots of data in a raw manner.
         """
-        return db.select(cls.TABLE, conditionals, None, orderFields, offset, count)        
-
+        return db.select(cls.TABLE, None, conditionals, orderFields, offset, count)
+            
     @classmethod
     def selectOneBasic(cls, db, conditionals=None):
         """
         A method like selectBasic(), but returns only the first result.
         """
-        return db.select(cls.TABLE, conditionals, None, orderFields, 0, 1)[0]        
+        return cls.selectBasic(db, conditionals, None, 0, 1)[0]                  
+    
+    @classmethod
+    def selectJoinBasic(cls, db, conditionals=None, orderFields=None, offset=0, count=0):
+        """
+        A method which will return a list of dictionaries given certain options, automatically joining on reference fields.
+        This does not automatically build up entities, so is useful only when working with lots of data in a raw manner.
+        """
+        joins, fields = cls._buildJoinRecursive()
+        return db.selectJoin(cls.TABLE, joins, fields, conditionals, orderFields, offset, count)            
+    
+    @classmethod
+    def selectJoinOneBasic(cls, db, conditionals=None):
+        """
+        A method like selectJoinBasic(), but returns only the first result.
+        """
+        return cls.selectJoinBasic(db, conditionals, None, 0, 1)[0]    
     
     def view(self, viewMode):
         """
